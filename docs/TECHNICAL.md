@@ -29,7 +29,7 @@ One place for **how** GweiZero works and how to run it.
   - AI output is never auto-accepted without compile/ABI/gas checks
   - Proof mint endpoint requires explicit signer env vars
 
-**Optional — component diagram (Mermaid):**
+**Component diagram (Mermaid):**
 
 ```mermaid
 flowchart TB
@@ -54,7 +54,7 @@ flowchart TB
     API --> REG
 ```
 
-**Optional — data flow (Mermaid):**
+**Data flow (Mermaid):**
 
 ```mermaid
 sequenceDiagram
