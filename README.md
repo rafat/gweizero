@@ -1,63 +1,126 @@
-# BNBChain Hackathon Project Template
+# GweiZero
 
-Different hackathons have different requirements. This repo is a **recommended structure** that, as a judge, I find makes submissions easier to evaluate and more likely to get a fair, complete read. Use it as a guide; adapt it to whatever your specific event asks for.
+AI-powered Solidity gas optimization platform for BNB Chain.
 
----
+Core value proposition:
 
-## Why This Structure Helps
+> Paste a contract, get validated optimization candidates with measured gas savings and optional on-chain proof minting.
 
-Judges typically rely on **what’s written in your repository**—together with your code—as the main basis for scoring. When key information lives in one place and follows a clear layout, it’s easier to assess your project consistently. This template is designed with that in mind: it’s the kind of structure I recommend as a judge, not a set of universal rules.
+## Repository Structure
 
----
-
-## What I Recommend Including
-
-| Suggested content              | Where to put it           |
-| ------------------------------ | ------------------------- |
-| Project overview               | `README.md`               |
-| Problem, solution, impact, roadmap | `docs/PROJECT.md`     |
-| Architecture, setup, demo      | `docs/TECHNICAL.md`       |
-| Contract addresses (if you have them) | `bsc.address` (root) |
-
-**On-chain projects:** Many judges appreciate a single address file at the repo root. This template includes **`bsc.address`** for that. If your hackathon or judges expect something similar, filling it in (and keeping it verifiable) tends to help on-chain evaluation.
-
----
-
-## Optional Extras
-
-Demo videos and slide decks are **mostly for presentation**—pitches, finalist demos, or sharing with audiences. As a technical judge, I mainly **dive into the code and run the project myself**. What helps me most is a repo that’s **easy to get running**: clear setup steps in `docs/TECHNICAL.md` and reproducible instructions. Making it easy to start is far more helpful than a video or slides.
-
-If you still want to share a demo or deck, you can add links in **`docs/EXTRAS.md`**. Having those links in the repo makes them easy to find; for technical evaluation, I still rely on the code and documentation first.
-
----
-
-## A Note on What Judges Can Reasonably Score
-
-In practice, judges usually base scores on **what’s in the repo**. Information that appears only in slides, or only in a demo video, is harder to verify and compare across teams. So I recommend documenting your problem, solution, architecture, and usage in the repo; treat slides and video as support, not the main source of truth.
-
----
-
-## Suggested Repository Layout
-
-```
+```text
 /README.md
-/bsc.address              ← Deployments: contracts, addresses, explorer links (on-chain projects)
-/docs/
-    PROJECT.md            ← Problem, solution, business, limitations
-    TECHNICAL.md          ← Architecture, setup, demo guide
-    EXTRAS.md             ← Optional: demo video & presentation links
-/src/                     ← Your project source code
-/test/                    ← Tests (if applicable)
+/bsc.address
+/docs
+/src
+  /backend
+  /worker
+  /frontend
 ```
 
----
+- `src/backend`: API orchestration, async analysis jobs, SSE progress, AI optimization pipeline, proof payload/mint endpoints.
+- `src/worker`: heavy compile/deploy/gas measurement service (Hardhat), durable job persistence in Postgres, cancel/retry.
+- `src/frontend`: reserved for Next.js app.
 
-## Quick Start
+## Architecture
 
-1. **Fork or use this template** and rename the repo to your project name.
-2. **Fill in** `README.md`, `docs/PROJECT.md`, and `docs/TECHNICAL.md` so judges have a clear picture of your project.
-3. **Add your code** under `src/` (and tests under `test/` if you have them).
-4. **If you deploy contracts**, consider filling `bsc.address` (contract names, addresses, explorer links) so judges can easily find and verify them.
-5. **Submit** your GitHub repository link according to your hackathon’s instructions.
+1. Frontend submits Solidity source to backend.
+2. Backend runs:
+   - static analysis
+   - dynamic analysis (delegated to worker)
+   - robust AI optimization loop
+3. Backend performs final acceptance validation:
+   - candidate compiles
+   - ABI compatibility
+   - gas regression threshold checks
+4. Optional: backend derives and mints `GasOptimizationRegistry` proof on-chain.
 
-Good luck! 🚀
+## Current Backend/Worker Features
+
+- Async analysis jobs with statuses and SSE progress streaming.
+- Worker-side cancel and retry job controls.
+- Postgres-backed worker job persistence.
+- AI robustness controls:
+  - structured JSON schema validation
+  - repair retries for invalid output
+  - provider/model fallback
+  - verifier pass
+  - compile-feedback iterative attempts
+- Final accepted-contract validation before optimized result is accepted.
+
+## Prerequisites
+
+- Node.js `20+`
+- npm
+- Docker (optional, for local Postgres)
+- AI API key:
+  - `GEMINI_API_KEY` or `GOOGLE_API_KEY`
+  - optional `OPENAI_API_KEY` for fallback
+
+## Local Quick Start
+
+### 1) Start Postgres (for worker)
+
+```bash
+docker run --name gweizero-postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_DB=gweizero_worker \
+  -p 5432:5432 \
+  -d postgres:16
+```
+
+### 2) Configure worker
+
+```bash
+cd src/worker
+cp .env.example .env
+npm install
+npm run dev
+```
+
+### 3) Configure backend
+
+```bash
+cd src/backend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Minimum backend env values:
+
+- `COMPILATION_WORKER_URL=http://127.0.0.1:3010`
+- `GEMINI_API_KEY=...` (or `GOOGLE_API_KEY=...`)
+
+## Primary API Flows
+
+### Async analysis (recommended)
+
+1. `POST /api/analyze/jobs` with `{ code }`
+2. `GET /api/analyze/jobs/:id/events` for SSE progress
+3. `GET /api/analyze/jobs/:id` for status/result
+4. Optional cancel: `POST /api/analyze/jobs/:id/cancel`
+
+### Proof integration (after accepted optimization)
+
+1. `POST /api/analyze/jobs/:id/proof-payload`
+2. `POST /api/analyze/jobs/:id/mint-proof`
+
+Requires backend env:
+
+- `CHAIN_RPC_URL`
+- `BACKEND_SIGNER_PRIVATE_KEY`
+- `GAS_OPTIMIZATION_REGISTRY_ADDRESS`
+
+## Service Documentation
+
+- `src/backend/README.md`
+- `src/worker/README.md`
+- `src/frontend/README.md`
+
+## Notes
+
+- Worker and backend are intentionally split for fault isolation and scalability.
+- Worker persistence is Postgres-only (`DATABASE_URL` required).
+- `bsc.address` should be updated with deployed contract addresses when available.
