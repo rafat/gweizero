@@ -20,8 +20,10 @@ pnpm-debug.log*
 
 # Build output
 **/dist/
+**/.next/
 **/coverage/
 **/.turbo/
+**/.vercel/
 
 # Hardhat generated files
 src/backend/hardhat/artifacts/
