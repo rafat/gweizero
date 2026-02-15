@@ -29,6 +29,9 @@ src/backend/hardhat/cache/
 src/backend/hardhat/typechain-types/
 src/worker/hardhat/artifacts/
 src/worker/hardhat/cache/
+src/contracts/artifacts/
+src/contracts/cache/
+src/contracts/typechain-types/
 
 # Worker runtime data
 src/worker/data/

@@ -14,11 +14,13 @@ Core value proposition:
 /docs
 /src
   /backend
+  /contracts
   /worker
   /frontend
 ```
 
 - `src/backend`: API orchestration, async analysis jobs, SSE progress, AI optimization pipeline, proof payload/mint endpoints.
+- `src/contracts`: Hardhat package for `GasOptimizationRegistry` contract, tests, and deploy scripts.
 - `src/worker`: heavy compile/deploy/gas measurement service (Hardhat), durable job persistence in Postgres, cancel/retry.
 - `src/frontend`: reserved for Next.js app.
 

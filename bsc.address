@@ -1,18 +1,12 @@
 {
-  "projectName": "<Your Project Name>",
-  "network": "BSC Testnet",
+  "projectName": "GweiZero",
+  "network": "BSC Mainnet",
   "contracts": [
     {
-      "name": "ExampleToken",
-      "address": "0x123...",
-      "explorerLink": "https://testnet.bscscan.com/address/...",
-      "description": "Governance token"
-    },
-    {
-      "name": "ExampleVault",
-      "address": "0xabc...",
-      "explorerLink": "https://testnet.bscscan.com/address/...",
-      "description": "Staking vault"
+      "name": "GasOptimizationRegistry",
+      "address": "0x50be56269a0382C345752B341c60A9962eE988C6",
+      "explorerLink": "https://bsctrace.com/address/0x50be56269a0382C345752B341c60A9962eE988C6",
+      "description": "GweiZero Optimization Proof"
     }
   ],
   "frontendUrl": "https://...",
