@@ -2,7 +2,7 @@
 
 Next.js cinematic frontend shell for contract analysis UX.
 
-## Milestone A + B + C Status
+## Milestone A + B + C + D Status
 
 Implemented:
 
@@ -25,6 +25,11 @@ Implemented:
   - function-level gas comparison table
   - interactive savings calculator
   - Monaco side-by-side code diff (original vs optimized)
+- Milestone D proof flow:
+  - derive proof payload (`POST /api/analyze/jobs/:id/proof-payload`)
+  - mint proof (`POST /api/analyze/jobs/:id/mint-proof`)
+  - tx state indicators (idle/loading/success/error)
+  - mint receipt display with explorer link
 
 ## Setup
 
@@ -52,4 +57,4 @@ Open:
 
 - Add visual chart module (bar/ring charts)
 - Add optimization cards with line-jump integration into Monaco diff
-- Add proof payload + mint actions on results HUD
+- Add wallet-connected direct mint option (non-relayed)

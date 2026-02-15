@@ -98,6 +98,27 @@ export type AnalysisJobResponse = {
   result?: AnalysisResult;
 };
 
+export type ProofPayloadResponse = {
+  originalHash: string;
+  optimizedHash: string;
+  contractAddress: string;
+  contractName: string;
+  originalGas: number;
+  optimizedGas: number;
+  savingsPercentBps: number;
+};
+
+export type MintProofResponse = {
+  minted: boolean;
+  payload: ProofPayloadResponse;
+  receipt: {
+    txHash: string;
+    tokenId?: string;
+    registryAddress: string;
+    chainId: number;
+  };
+};
+
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:3001";
 
 export async function createAnalysisJob(code: string): Promise<CreateAnalysisJobResponse> {
@@ -156,4 +177,44 @@ export function analysisEventsUrl(jobId: string): string {
 
 export function isTerminalStatus(status: AnalysisPhaseStatus): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+export async function getProofPayload(
+  jobId: string,
+  input?: { contractAddress?: string; contractName?: string }
+): Promise<ProofPayloadResponse> {
+  const response = await fetch(`${BASE_URL}/api/analyze/jobs/${jobId}/proof-payload`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input || {})
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to derive proof payload (${response.status}): ${errorText}`);
+  }
+
+  return response.json();
+}
+
+export async function mintProof(
+  jobId: string,
+  input?: { contractAddress?: string; contractName?: string }
+): Promise<MintProofResponse> {
+  const response = await fetch(`${BASE_URL}/api/analyze/jobs/${jobId}/mint-proof`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input || {})
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to mint proof (${response.status}): ${errorText}`);
+  }
+
+  return response.json();
 }

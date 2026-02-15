@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FunctionGasTable } from "@/features/analysis/components/function-gas-table";
 import { MonacoDiffPanel } from "@/features/analysis/components/monaco-diff-panel";
+import { ProofActions } from "@/features/analysis/components/proof-actions";
 import { ResultsBento } from "@/features/analysis/components/results-bento";
 import { SavingsCalculator } from "@/features/analysis/components/savings-calculator";
 import {
@@ -222,6 +223,9 @@ export function AnalysisJobHud({ jobId }: Props) {
             <FunctionGasTable result={job.result} />
             <SavingsCalculator result={job.result} />
             <MonacoDiffPanel originalCode={job.result.originalContract} result={job.result} />
+            {job.result.optimizationValidation?.accepted && (
+              <ProofActions jobId={jobId} defaultContractName={job.result.staticProfile?.contractName} />
+            )}
           </>
         )}
 
