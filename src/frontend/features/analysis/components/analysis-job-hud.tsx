@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { FunctionGasTable } from "@/features/analysis/components/function-gas-table";
+import { MonacoDiffPanel } from "@/features/analysis/components/monaco-diff-panel";
+import { ResultsBento } from "@/features/analysis/components/results-bento";
+import { SavingsCalculator } from "@/features/analysis/components/savings-calculator";
 import {
   AnalysisJobResponse,
   AnalysisPhaseStatus,
@@ -210,6 +214,15 @@ export function AnalysisJobHud({ jobId }: Props) {
               <p className="mt-1 text-sm text-muted">Attempts: {job.result.optimizationAttempts}</p>
             )}
           </div>
+        )}
+
+        {job?.status === "completed" && job.result && (
+          <>
+            <ResultsBento result={job.result} />
+            <FunctionGasTable result={job.result} />
+            <SavingsCalculator result={job.result} />
+            <MonacoDiffPanel originalCode={job.result.originalContract} result={job.result} />
+          </>
         )}
 
         <div className="mt-6 rounded-xl border border-line bg-surface-2 p-4">

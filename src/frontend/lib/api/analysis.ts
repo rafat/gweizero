@@ -18,6 +18,75 @@ export type AnalysisProgressEvent = {
   timestamp: number;
 };
 
+export type GasProfile = {
+  deploymentGas: string;
+  functions: Record<string, string>;
+};
+
+export type DynamicProfile = {
+  gasProfile: GasProfile;
+  abi: unknown[];
+  bytecode: string;
+  contractName: string;
+};
+
+export type AIEdit = {
+  action: "replace" | "insert" | "delete";
+  lineStart: number;
+  lineEnd: number;
+  before: string;
+  after: string;
+  rationale: string;
+};
+
+export type AIOptimization = {
+  type: string;
+  description: string;
+  estimatedSaving: string;
+  line: number;
+  before: string;
+  after: string;
+};
+
+export type AIOptimizationsResult = {
+  optimizations: AIOptimization[];
+  edits: AIEdit[];
+  optimizedContract: string;
+  totalEstimatedSaving: string;
+  meta?: {
+    warnings?: string[];
+  };
+};
+
+export type OptimizationValidation = {
+  accepted: boolean;
+  reason: string;
+  checks?: {
+    compiled: boolean;
+    abiCompatible: boolean;
+    deploymentGasRegressionPct: number;
+    averageMutableFunctionRegressionPct: number;
+    improved: boolean;
+  };
+};
+
+export type AnalysisResult = {
+  originalContract?: string;
+  staticProfile?: {
+    contractName?: string;
+    functions?: Array<{
+      name?: string;
+      visibility?: string;
+      stateMutability?: string | null;
+    }>;
+  };
+  dynamicProfile?: DynamicProfile;
+  optimizedDynamicProfile?: DynamicProfile | null;
+  aiOptimizations?: AIOptimizationsResult;
+  optimizationValidation?: OptimizationValidation;
+  optimizationAttempts?: number;
+};
+
 export type AnalysisJobResponse = {
   id: string;
   status: AnalysisPhaseStatus;
@@ -26,23 +95,7 @@ export type AnalysisJobResponse = {
   cancelRequested: boolean;
   error?: string;
   events: AnalysisProgressEvent[];
-  result?: {
-    optimizationValidation?: {
-      accepted: boolean;
-      reason: string;
-    };
-    optimizationAttempts?: number;
-    dynamicProfile?: {
-      gasProfile?: {
-        deploymentGas?: string;
-      };
-    };
-    optimizedDynamicProfile?: {
-      gasProfile?: {
-        deploymentGas?: string;
-      };
-    };
-  };
+  result?: AnalysisResult;
 };
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:3001";

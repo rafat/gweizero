@@ -36,6 +36,7 @@ export class AnalysisService {
 
     onProgress?.('ai_optimization', 'Analysis complete. Consolidating report...');
     return {
+      originalContract: code,
       staticProfile,
       dynamicProfile: baselineDynamicProfile,
       aiOptimizations: optimizationLoop.aiResult,

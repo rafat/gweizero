@@ -2,7 +2,7 @@
 
 Next.js cinematic frontend shell for contract analysis UX.
 
-## Milestone A + B Status
+## Milestone A + B + C Status
 
 Implemented:
 
@@ -20,6 +20,11 @@ Implemented:
   - phase timeline (`queued` -> `static` -> `dynamic` -> `ai` -> `complete`)
   - cancel action (`POST /api/analyze/jobs/:id/cancel`)
   - acceptance summary display
+- Milestone C results experience:
+  - bento summary cards (contract + gas overview)
+  - function-level gas comparison table
+  - interactive savings calculator
+  - Monaco side-by-side code diff (original vs optimized)
 
 ## Setup
 
@@ -45,7 +50,6 @@ Open:
 
 ## Next Milestone
 
-- Add rich results bento grid
-- Function-level gas table + visual charts
-- Monaco diff viewer with `edits[]` overlays
-- Savings calculator + proof payload/mint actions
+- Add visual chart module (bar/ring charts)
+- Add optimization cards with line-jump integration into Monaco diff
+- Add proof payload + mint actions on results HUD
