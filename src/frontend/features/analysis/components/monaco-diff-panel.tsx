@@ -1,15 +1,41 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect, useRef } from "react";
 import { AnalysisResult } from "@/lib/api/analysis";
 
 const MonacoDiffEditor = dynamic(async () => (await import("@monaco-editor/react")).DiffEditor, {
   ssr: false
 });
 
-export function MonacoDiffPanel({ originalCode, result }: { originalCode?: string; result: AnalysisResult }) {
+export function MonacoDiffPanel({
+  originalCode,
+  result,
+  focusLine,
+  focusNonce
+}: {
+  originalCode?: string;
+  result: AnalysisResult;
+  focusLine?: number | null;
+  focusNonce?: number;
+}) {
   const optimized = result.aiOptimizations?.optimizedContract || "";
   const original = originalCode || "";
+  const editorRef = useRef<{
+    getModifiedEditor: () => {
+      revealLineInCenter: (line: number) => void;
+      setPosition: (pos: { lineNumber: number; column: number }) => void;
+      focus: () => void;
+    };
+  } | null>(null);
+
+  useEffect(() => {
+    if (!focusLine || focusLine < 1 || !editorRef.current) return;
+    const modified = editorRef.current.getModifiedEditor();
+    modified.revealLineInCenter(focusLine);
+    modified.setPosition({ lineNumber: focusLine, column: 1 });
+    modified.focus();
+  }, [focusLine, focusNonce]);
 
   if (!optimized || !original) {
     return (
@@ -29,6 +55,9 @@ export function MonacoDiffPanel({ originalCode, result }: { originalCode?: strin
           language="sol"
           original={original}
           modified={optimized}
+          onMount={(editor: any) => {
+            editorRef.current = editor;
+          }}
           options={{
             readOnly: true,
             renderSideBySide: true,

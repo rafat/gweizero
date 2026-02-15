@@ -1,12 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import gsap from "gsap";
 import { Button } from "@/components/ui/button";
 import { FunctionGasTable } from "@/features/analysis/components/function-gas-table";
+import { GasChartPanel } from "@/features/analysis/components/gas-chart-panel";
 import { MonacoDiffPanel } from "@/features/analysis/components/monaco-diff-panel";
+import { OptimizationCards } from "@/features/analysis/components/optimization-cards";
 import { ProofActions } from "@/features/analysis/components/proof-actions";
 import { ResultsBento } from "@/features/analysis/components/results-bento";
 import { SavingsCalculator } from "@/features/analysis/components/savings-calculator";
+import { playAnalysisCompleteCue } from "@/lib/sound/ui-sound";
+import { useCinematicStore } from "@/store/cinematic";
 import {
   AnalysisJobResponse,
   AnalysisPhaseStatus,
@@ -42,9 +47,14 @@ export function AnalysisJobHud({ jobId }: Props) {
   const [streamMode, setStreamMode] = useState<"sse" | "polling" | "initializing">("initializing");
   const [localEvents, setLocalEvents] = useState<AnalysisProgressEvent[]>([]);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [focusedLine, setFocusedLine] = useState<number | null>(null);
+  const [focusNonce, setFocusNonce] = useState(0);
+  const setGlowIntensity = useCinematicStore((s) => s.setGlowIntensity);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const phaseGridRef = useRef<HTMLDivElement | null>(null);
+  const previousStatusRef = useRef<AnalysisPhaseStatus | null>(null);
 
   const status = job?.status ?? "queued";
   const isTerminal = isTerminalStatus(status);
@@ -138,6 +148,54 @@ export function AnalysisJobHud({ jobId }: Props) {
     };
   }, [fetchJob, jobId, startPolling, stopPolling, stopSse]);
 
+  useEffect(() => {
+    if (!phaseGridRef.current) return;
+    const cards = phaseGridRef.current.querySelectorAll("[data-phase-card='true']");
+    gsap.fromTo(
+      cards,
+      { y: 6, opacity: 0.75 },
+      {
+        y: 0,
+        opacity: 1,
+        duration: 0.35,
+        ease: "power2.out",
+        stagger: 0.04
+      }
+    );
+  }, [status]);
+
+  useEffect(() => {
+    const prev = previousStatusRef.current;
+    if (status === "completed" && prev !== "completed") {
+      playAnalysisCompleteCue();
+    }
+    previousStatusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    if (!job?.result || status !== "completed") {
+      setGlowIntensity(0.2);
+      return;
+    }
+
+    const baselineFns = job.result.dynamicProfile?.gasProfile?.functions || {};
+    const optimizedFns = job.result.optimizedDynamicProfile?.gasProfile?.functions || {};
+
+    const avg = (values: Record<string, string>) => {
+      const nums = Object.values(values).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
+      if (!nums.length) return 0;
+      return nums.reduce((a, b) => a + b, 0) / nums.length;
+    };
+
+    const before = avg(baselineFns);
+    const after = avg(optimizedFns);
+    const savingsPct = before > 0 ? ((before - after) / before) * 100 : 0;
+
+    // Map 0-25% savings range to cinematic glow range.
+    const normalized = Math.max(0, Math.min(1, savingsPct / 25));
+    setGlowIntensity(0.2 + normalized * 0.8);
+  }, [job?.result, setGlowIntensity, status]);
+
   async function onCancel() {
     setIsCancelling(true);
     setError(null);
@@ -154,6 +212,12 @@ export function AnalysisJobHud({ jobId }: Props) {
     } finally {
       setIsCancelling(false);
     }
+  }
+
+  function jumpToDiffLine(line: number) {
+    if (!Number.isFinite(line) || line < 1) return;
+    setFocusedLine(Math.floor(line));
+    setFocusNonce((v) => v + 1);
   }
 
   return (
@@ -180,7 +244,7 @@ export function AnalysisJobHud({ jobId }: Props) {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-5">
+        <div ref={phaseGridRef} className="mt-6 grid gap-3 md:grid-cols-5">
           {PHASES.map((phase, index) => {
             const phaseIndex = PHASES.findIndex((p) => p.key === status);
             const done = phaseIndex > index || status === "completed";
@@ -189,6 +253,7 @@ export function AnalysisJobHud({ jobId }: Props) {
             return (
               <div
                 key={phase.key}
+                data-phase-card="true"
                 className={`rounded-xl border px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider ${phaseClass(
                   active,
                   done,
@@ -220,9 +285,16 @@ export function AnalysisJobHud({ jobId }: Props) {
         {job?.status === "completed" && job.result && (
           <>
             <ResultsBento result={job.result} />
+            <GasChartPanel result={job.result} />
             <FunctionGasTable result={job.result} />
             <SavingsCalculator result={job.result} />
-            <MonacoDiffPanel originalCode={job.result.originalContract} result={job.result} />
+            <OptimizationCards result={job.result} onJumpToLine={jumpToDiffLine} />
+            <MonacoDiffPanel
+              originalCode={job.result.originalContract}
+              result={job.result}
+              focusLine={focusedLine}
+              focusNonce={focusNonce}
+            />
             {job.result.optimizationValidation?.accepted && (
               <ProofActions jobId={jobId} defaultContractName={job.result.staticProfile?.contractName} />
             )}

@@ -2,7 +2,7 @@
 
 Next.js cinematic frontend shell for contract analysis UX.
 
-## Milestone A + B + C + D Status
+## Milestone A + B + C + D + E Status
 
 Implemented:
 
@@ -30,6 +30,10 @@ Implemented:
   - mint proof (`POST /api/analyze/jobs/:id/mint-proof`)
   - tx state indicators (idle/loading/success/error)
   - mint receipt display with explorer link
+- Milestone E cinematic polish:
+  - animated 3D background layer (R3F/Drei)
+  - GSAP phase transition animation on job timeline
+  - subtle UI audio cues (hover/click/analysis complete)
 
 ## Setup
 

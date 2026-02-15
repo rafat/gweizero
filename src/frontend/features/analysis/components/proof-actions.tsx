@@ -4,6 +4,21 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { MintProofResponse, ProofPayloadResponse, getProofPayload, mintProof } from "@/lib/api/analysis";
 
+type MintHistoryEntry = {
+  id: string;
+  jobId: string;
+  timestamp: number;
+  chainId: number;
+  txHash: string;
+  tokenId?: string;
+  contractName: string;
+  originalHash: string;
+  optimizedHash: string;
+  savingsPercentBps: number;
+};
+
+const HISTORY_KEY = "gweizero_mint_history";
+
 type Props = {
   jobId: string;
   defaultContractName?: string;
@@ -17,6 +32,8 @@ export function ProofActions({ jobId, defaultContractName }: Props) {
   const [payloadState, setPayloadState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [mintState, setMintState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [history, setHistory] = useState<MintHistoryEntry[]>(() => loadMintHistory());
 
   const requestBody = useMemo(
     () => ({
@@ -49,10 +66,37 @@ export function ProofActions({ jobId, defaultContractName }: Props) {
       setMintReceipt(receipt);
       setPayload(receipt.payload);
       setMintState("success");
+      const nextEntry: MintHistoryEntry = {
+        id: `${receipt.receipt.txHash}-${Date.now()}`,
+        jobId,
+        timestamp: Date.now(),
+        chainId: receipt.receipt.chainId,
+        txHash: receipt.receipt.txHash,
+        tokenId: receipt.receipt.tokenId,
+        contractName: receipt.payload.contractName,
+        originalHash: receipt.payload.originalHash,
+        optimizedHash: receipt.payload.optimizedHash,
+        savingsPercentBps: receipt.payload.savingsPercentBps
+      };
+      setHistory((prev) => {
+        const next = [nextEntry, ...prev].slice(0, 12);
+        saveMintHistory(next);
+        return next;
+      });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to mint proof.";
       setError(message);
       setMintState("error");
+    }
+  }
+
+  async function copyText(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied((curr) => (curr === label ? null : curr)), 1200);
+    } catch {
+      setError("Clipboard copy failed.");
     }
   }
 
@@ -103,6 +147,22 @@ export function ProofActions({ jobId, defaultContractName }: Props) {
       {payload && (
         <div className="mt-4 rounded-lg border border-line/70 bg-surface p-3">
           <p className="text-xs uppercase tracking-wider text-muted">Payload</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              className="text-xs"
+              onClick={() => copyText("originalHash", payload.originalHash)}
+            >
+              {copied === "originalHash" ? "Copied original hash" : "Copy Original Hash"}
+            </Button>
+            <Button
+              variant="secondary"
+              className="text-xs"
+              onClick={() => copyText("optimizedHash", payload.optimizedHash)}
+            >
+              {copied === "optimizedHash" ? "Copied optimized hash" : "Copy Optimized Hash"}
+            </Button>
+          </div>
           <pre className="mt-2 overflow-auto text-xs text-text">{JSON.stringify(payload, null, 2)}</pre>
         </div>
       )}
@@ -113,6 +173,15 @@ export function ProofActions({ jobId, defaultContractName }: Props) {
           <p className="mt-2 text-sm">
             Tx Hash: <span className="font-mono text-xs">{mintReceipt.receipt.txHash}</span>
           </p>
+          <div className="mt-2">
+            <Button
+              variant="secondary"
+              className="text-xs"
+              onClick={() => copyText("txHash", mintReceipt.receipt.txHash)}
+            >
+              {copied === "txHash" ? "Copied tx hash" : "Copy Tx Hash"}
+            </Button>
+          </div>
           {explorerTxUrl(mintReceipt.receipt.chainId, mintReceipt.receipt.txHash) && (
             <a
               href={explorerTxUrl(mintReceipt.receipt.chainId, mintReceipt.receipt.txHash)!}
@@ -130,6 +199,43 @@ export function ProofActions({ jobId, defaultContractName }: Props) {
         </div>
       )}
 
+      <div className="mt-4 rounded-lg border border-line/70 bg-surface p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs uppercase tracking-wider text-muted">Mint History (Current Session)</p>
+          {history.length > 0 && (
+            <Button
+              variant="secondary"
+              className="text-xs"
+              onClick={() => {
+                setHistory([]);
+                saveMintHistory([]);
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+
+        {history.length === 0 && <p className="mt-2 text-xs text-muted">No mint transactions yet.</p>}
+        {history.length > 0 && (
+          <div className="mt-2 max-h-52 space-y-2 overflow-auto pr-1">
+            {history.map((entry) => (
+              <div key={entry.id} className="rounded-lg border border-line/60 px-3 py-2">
+                <p className="text-xs text-muted">
+                  {new Date(entry.timestamp).toLocaleTimeString()} · Job {entry.jobId.slice(0, 8)}...
+                </p>
+                <p className="mt-1 text-xs font-mono text-text">{entry.txHash}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted">
+                  <span>Chain {entry.chainId}</span>
+                  <span>Token {entry.tokenId || "—"}</span>
+                  <span>Save {(entry.savingsPercentBps / 100).toFixed(2)}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
@@ -141,6 +247,27 @@ function explorerTxUrl(chainId: number, txHash: string): string | null {
   if (chainId === 204) return `https://opbnbscan.com/tx/${txHash}`;
   if (chainId === 5611) return `https://testnet.opbnbscan.com/tx/${txHash}`;
   return null;
+}
+
+function loadMintHistory(): MintHistoryEntry[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const raw = window.sessionStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as MintHistoryEntry[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveMintHistory(entries: MintHistoryEntry[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
 }
 
 function StatusPill({
