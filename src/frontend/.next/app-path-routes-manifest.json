@@ -1,6 +1,6 @@
 {
-  "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
+  "/_global-error/page": "/_global-error",
   "/analysis/[jobId]/page": "/analysis/[jobId]",
   "/page": "/"
 }

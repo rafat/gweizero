@@ -2,7 +2,7 @@
 
 Next.js cinematic frontend shell for contract analysis UX.
 
-## Milestone A Status
+## Milestone A + B Status
 
 Implemented:
 
@@ -14,7 +14,12 @@ Implemented:
   - analyze action
 - Backend job creation integration (`POST /api/analyze/jobs`)
 - Redirect to analysis route (`/analysis/[jobId]`)
-- Base analysis page scaffold for upcoming live progress HUD
+- Live analysis HUD on `/analysis/[jobId]`:
+  - SSE stream consumption (`/api/analyze/jobs/:id/events`)
+  - polling fallback when SSE fails
+  - phase timeline (`queued` -> `static` -> `dynamic` -> `ai` -> `complete`)
+  - cancel action (`POST /api/analyze/jobs/:id/cancel`)
+  - acceptance summary display
 
 ## Setup
 
@@ -40,6 +45,7 @@ Open:
 
 ## Next Milestone
 
-- Wire SSE stream (`/api/analyze/jobs/:id/events`)
-- Build scanning/progress phase timeline
-- Add result HUD cards, function table, diff viewer, and calculator
+- Add rich results bento grid
+- Function-level gas table + visual charts
+- Monaco diff viewer with `edits[]` overlays
+- Savings calculator + proof payload/mint actions
