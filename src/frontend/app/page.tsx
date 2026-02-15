@@ -6,18 +6,24 @@ export default function HomePage() {
     <main className="relative mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
       <header className="mb-10 flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-muted">GweiZero</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-accent">GweiZero</p>
           <h1 className="mt-2 text-4xl font-semibold leading-tight">
             Gas Optimization
             <br />
-            Cinematic HUD
+            BNB Chain HUD
           </h1>
         </div>
         <nav className="flex items-center gap-3 text-sm">
-          <Link className="rounded-lg border border-line px-3 py-2 text-muted hover:text-text" href="/">
+          <Link
+            className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-muted hover:border-accent/60 hover:text-accent"
+            href="/"
+          >
             Analyze
           </Link>
-          <Link className="rounded-lg border border-line px-3 py-2 text-muted hover:text-text" href="/analysis/demo">
+          <Link
+            className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-muted hover:border-accent/60 hover:text-accent"
+            href="/analysis/demo"
+          >
             Progress View
           </Link>
         </nav>

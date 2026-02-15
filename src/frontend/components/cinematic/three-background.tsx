@@ -32,7 +32,7 @@ function WireShape({ glowIntensity }: { glowIntensity: number }) {
       <Float speed={1} rotationIntensity={0.3} floatIntensity={0.5}>
         <Line
           points={points}
-          color={new THREE.Color("#4fd8ff").lerp(new THREE.Color("#61ffca"), glowIntensity).getStyle()}
+          color={new THREE.Color("#8b6a10").lerp(new THREE.Color("#f0b90b"), glowIntensity).getStyle()}
           lineWidth={1}
           transparent
           opacity={0.35 + glowIntensity * 0.6}
@@ -45,9 +45,9 @@ function WireShape({ glowIntensity }: { glowIntensity: number }) {
 export function ThreeBackground({ glowIntensity }: { glowIntensity: number }) {
   return (
     <Canvas camera={{ position: [0, 0, 8], fov: 55 }} dpr={[1, 1.5]}>
-      <color attach="background" args={["#050a10"]} />
+      <color attach="background" args={["#090b0e"]} />
       <ambientLight intensity={0.35 + glowIntensity * 0.7} />
-      <directionalLight position={[3, 2, 2]} intensity={0.25 + glowIntensity * 1.2} color="#8de7ff" />
+      <directionalLight position={[3, 2, 2]} intensity={0.25 + glowIntensity * 1.2} color="#f0b90b" />
       <WireShape glowIntensity={glowIntensity} />
       <OrbitControls enableZoom={false} enablePan={false} enableRotate={false} />
     </Canvas>

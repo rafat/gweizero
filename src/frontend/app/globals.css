@@ -3,14 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --surface: #070d12;
-  --surface-2: #0d1822;
-  --line: #1f3242;
-  --text: #e8f3ff;
-  --muted: #90a8bf;
-  --accent: #61ffca;
-  --success: #2dd4bf;
-  --danger: #fb7185;
+  --surface: #0b0e11;
+  --surface-2: #161a1f;
+  --line: #2b3139;
+  --text: #f5f5f5;
+  --muted: #a7b1bc;
+  --accent: #f0b90b;
+  --success: #2ebd85;
+  --danger: #f6465d;
 }
 
 * {
@@ -26,16 +26,32 @@ body {
 body {
   margin: 0;
   color: var(--text);
-  font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
+  font-family: "IBM Plex Sans", "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
   background:
-    radial-gradient(circle at 20% 20%, rgba(97, 255, 202, 0.08), transparent 30%),
-    radial-gradient(circle at 80% 10%, rgba(72, 163, 255, 0.12), transparent 25%),
-    linear-gradient(160deg, #060b10, #09131d 65%, #0d1a27);
+    radial-gradient(circle at 15% 12%, rgba(240, 185, 11, 0.14), transparent 32%),
+    radial-gradient(circle at 86% 0%, rgba(240, 185, 11, 0.09), transparent 28%),
+    linear-gradient(165deg, #090b0e, #0f1217 62%, #151a21);
 }
 
 .hud-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(240, 185, 11, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 185, 11, 0.05) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+.monaco-editor .gweizero-opt-line {
+  background: linear-gradient(90deg, rgba(240, 185, 11, 0.14), rgba(240, 185, 11, 0.04));
+}
+
+.monaco-editor .gweizero-opt-line-active {
+  background: linear-gradient(90deg, rgba(240, 185, 11, 0.28), rgba(240, 185, 11, 0.1));
+}
+
+.monaco-editor .gweizero-opt-glyph {
+  border-left: 3px solid rgba(240, 185, 11, 0.58);
+}
+
+.monaco-editor .gweizero-opt-glyph-active {
+  border-left-color: rgba(240, 185, 11, 0.95);
 }

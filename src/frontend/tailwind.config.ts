@@ -20,7 +20,7 @@ const config: Config = {
         danger: "var(--danger)"
       },
       boxShadow: {
-        glow: "0 0 30px rgba(97, 255, 202, 0.25)"
+        glow: "0 0 30px rgba(240, 185, 11, 0.35)"
       }
     }
   },

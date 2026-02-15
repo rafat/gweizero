@@ -32,7 +32,7 @@ export function GasChartPanel({ result }: { result: AnalysisResult }) {
   return (
     <section className="mt-6 rounded-xl border border-line bg-surface-2 p-4">
       <p className="text-sm font-semibold">Function Gas Bars (Top 8)</p>
-      <p className="mt-1 text-xs text-muted">Cyan = original, green = optimized</p>
+      <p className="mt-1 text-xs text-muted">Red = original, Binance yellow = optimized</p>
 
       <div className="mt-4 space-y-3">
         {data.map((row) => (
@@ -46,12 +46,12 @@ export function GasChartPanel({ result }: { result: AnalysisResult }) {
             </div>
             <div className="relative h-4 rounded-md bg-surface">
               <div
-                className="absolute inset-y-0 left-0 rounded-md bg-[#48c7ff]/70"
+                className="absolute inset-y-0 left-0 rounded-md bg-danger/55"
                 style={{ width: `${(row.original / maxGas) * 100}%` }}
               />
               {row.optimized != null && (
                 <div
-                  className="absolute inset-y-0 left-0 rounded-md bg-success/80"
+                  className="absolute inset-y-0 left-0 rounded-md bg-accent/85"
                   style={{ width: `${(row.optimized / maxGas) * 100}%` }}
                 />
               )}
