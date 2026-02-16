@@ -107,9 +107,29 @@ export class ProofMintService {
     };
   }
 
-  private static coerceGas(gasProfile: { deploymentGas: string; functions: Record<string, string> }): number {
+  private static coerceGas(gasProfile: {
+    deploymentGas: string;
+    functions: Record<
+      string,
+      | {
+          status: 'measured';
+          gasUsed: string;
+          stateMutability: string;
+        }
+      | {
+          status: 'unmeasured';
+          reason: string;
+          stateMutability: string;
+        }
+    >;
+  }): number {
     const numericFns = Object.values(gasProfile.functions || {})
-      .map((x) => Number(x))
+      .filter(
+        (entry): entry is { status: 'measured'; gasUsed: string; stateMutability: string } =>
+          entry.status === 'measured' &&
+          (entry.stateMutability === 'nonpayable' || entry.stateMutability === 'payable')
+      )
+      .map((entry) => Number(entry.gasUsed))
       .filter((x) => Number.isFinite(x) && x > 0);
 
     if (numericFns.length > 0) {

@@ -20,7 +20,7 @@ type OptimizationValidation = {
 };
 
 export class AnalysisService {
-  public static async processContract(code: string, onProgress?: ProgressCallback) {
+  public static async processContract(code: string, onProgress?: ProgressCallback, jobId?: string) {
     onProgress?.('static_analysis', 'Parsing contract (static analysis)...');
     const staticProfile = GasProfilerService.analyze(code);
 
@@ -31,7 +31,8 @@ export class AnalysisService {
     const optimizationLoop = await this.generateAcceptedOptimization(
       code,
       baselineDynamicProfile,
-      onProgress
+      onProgress,
+      jobId
     );
 
     onProgress?.('ai_optimization', 'Analysis complete. Consolidating report...');
@@ -49,7 +50,8 @@ export class AnalysisService {
   private static async generateAcceptedOptimization(
     originalCode: string,
     baselineDynamicProfile: WorkerDynamicProfile,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    jobId?: string
   ): Promise<{
     aiResult: AIOptimizationResponse;
     optimizedDynamicProfile: WorkerDynamicProfile | null;
@@ -63,6 +65,7 @@ export class AnalysisService {
     let latestAIResult: AIOptimizationResponse = {
       ...(await AIOptimizerService.getOptimizations(originalCode, baselineDynamicProfile.gasProfile, {
         feedback: 'Initial optimization pass.',
+        jobId,
       })),
     };
 
@@ -72,7 +75,7 @@ export class AnalysisService {
         latestAIResult = await AIOptimizerService.getOptimizations(
           originalCode,
           baselineDynamicProfile.gasProfile,
-          { feedback }
+          { feedback, jobId }
         );
       }
 
@@ -155,6 +158,7 @@ export class AnalysisService {
 
     const improved = deploymentAfter < deploymentBefore || avgAfter < avgBefore;
     const maxAllowedRegressionPct = this.envInt('AI_MAX_ALLOWED_REGRESSION_PCT', 2);
+    const maxAllowedDeploymentRegressionPct = this.envInt('AI_MAX_DEPLOYMENT_REGRESSION_PCT', 15);
 
     if (!abiCompatible) {
       return {
@@ -170,13 +174,24 @@ export class AnalysisService {
       };
     }
 
-    if (
-      deploymentGasRegressionPct > maxAllowedRegressionPct ||
-      averageMutableFunctionRegressionPct > maxAllowedRegressionPct
-    ) {
+    if (averageMutableFunctionRegressionPct > maxAllowedRegressionPct) {
       return {
         accepted: false,
-        reason: `Gas regression exceeded threshold (${maxAllowedRegressionPct}%).`,
+        reason: `Mutable-function gas regression exceeded threshold (${maxAllowedRegressionPct}%).`,
+        checks: {
+          compiled: true,
+          abiCompatible,
+          deploymentGasRegressionPct,
+          averageMutableFunctionRegressionPct,
+          improved,
+        },
+      };
+    }
+
+    if (deploymentGasRegressionPct > maxAllowedDeploymentRegressionPct) {
+      return {
+        accepted: false,
+        reason: `Deployment gas regression exceeded secondary threshold (${maxAllowedDeploymentRegressionPct}%).`,
         checks: {
           compiled: true,
           abiCompatible,
@@ -233,9 +248,28 @@ export class AnalysisService {
     return set;
   }
 
-  private static averageFunctionGas(functions: Record<string, string>): number {
+  private static averageFunctionGas(
+    functions: Record<
+      string,
+      | {
+          status: 'measured';
+          gasUsed: string;
+          stateMutability: string;
+        }
+      | {
+          status: 'unmeasured';
+          reason: string;
+          stateMutability: string;
+        }
+    >
+  ): number {
     const numeric = Object.values(functions)
-      .map((v) => Number(v))
+      .filter(
+        (entry): entry is { status: 'measured'; gasUsed: string; stateMutability: string } =>
+          entry.status === 'measured' &&
+          (entry.stateMutability === 'nonpayable' || entry.stateMutability === 'payable')
+      )
+      .map((entry) => Number(entry.gasUsed))
       .filter((v) => Number.isFinite(v) && v > 0);
     if (numeric.length === 0) {
       return 0;

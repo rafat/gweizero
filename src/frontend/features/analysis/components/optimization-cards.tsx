@@ -21,10 +21,18 @@ export function OptimizationCards({ result, onJumpToLine }: Props) {
         {optimizations.map((item, index) => {
           const line = Number(item.line || 0);
           return (
-            <button
+            <div
               key={`${item.type}-${index}-${line}`}
-              type="button"
+              role={line > 0 ? "button" : undefined}
+              tabIndex={line > 0 ? 0 : -1}
               onClick={() => line > 0 && onJumpToLine(line)}
+              onKeyDown={(event) => {
+                if (line <= 0) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onJumpToLine(line);
+                }
+              }}
               className="rounded-lg border border-line/70 bg-surface p-3 text-left transition hover:border-accent/60 hover:bg-surface/80"
             >
               <div className="flex items-start justify-between gap-3">
@@ -50,7 +58,7 @@ export function OptimizationCards({ result, onJumpToLine }: Props) {
                   </Button>
                 </div>
               )}
-            </button>
+            </div>
           );
         })}
       </div>

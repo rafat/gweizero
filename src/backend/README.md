@@ -42,12 +42,19 @@ Key variables:
 - `COMPILATION_WORKER_URL=http://127.0.0.1:3010`
 - `WORKER_POLL_INTERVAL_MS=1000`
 - `WORKER_TIMEOUT_MS=180000`
+- `ANALYSIS_JOB_DEDUPE_TTL_MS=600000` (reuse same-code in-flight/recent completed job to avoid duplicate runs)
 - `GEMINI_API_KEY=...` (or `GOOGLE_API_KEY=...`)
+- `AI_GEMINI_MODELS=gemini-2.5-flash` (required when using Gemini key)
 - `OPENAI_API_KEY=...` (optional fallback)
+- `AI_OPENAI_MODELS=gpt-4.1-mini` (required when using OpenAI key)
+- `AI_LOGGING_ENABLED=true` (logs provider/model/retries/latency)
+- `AI_LOG_RAW_RESPONSES=false` (set true to print raw model output)
+- `AI_LOG_RAW_MAX_CHARS=5000` (truncate raw output logs)
 - `AI_PROVIDER_RETRIES=2`
 - `AI_MAX_OPTIMIZER_CYCLES=3`
 - `AI_ACCEPTANCE_MAX_ATTEMPTS=3`
 - `AI_MAX_ALLOWED_REGRESSION_PCT=2`
+- `AI_MAX_DEPLOYMENT_REGRESSION_PCT=15` (secondary deployment threshold; runtime function gas is primary)
 
 ## Run
 

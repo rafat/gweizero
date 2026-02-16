@@ -14,26 +14,26 @@ import * as Contracts from ".";
 declare module "hardhat/types/runtime" {
   interface HardhatEthersHelpers extends HardhatEthersHelpersBase {
     getContractFactory(
-      name: "TempContract",
+      name: "GasOptimizerDemo",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.TempContract__factory>;
+    ): Promise<Contracts.GasOptimizerDemo__factory>;
 
     getContractAt(
-      name: "TempContract",
+      name: "GasOptimizerDemo",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.TempContract>;
+    ): Promise<Contracts.GasOptimizerDemo>;
 
     deployContract(
-      name: "TempContract",
+      name: "GasOptimizerDemo",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.TempContract>;
+    ): Promise<Contracts.GasOptimizerDemo>;
 
     deployContract(
-      name: "TempContract",
+      name: "GasOptimizerDemo",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.TempContract>;
+    ): Promise<Contracts.GasOptimizerDemo>;
 
     // default types
     getContractFactory(

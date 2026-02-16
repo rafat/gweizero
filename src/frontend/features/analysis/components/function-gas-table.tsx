@@ -4,10 +4,42 @@ import { AnalysisResult } from "@/lib/api/analysis";
 
 type Row = {
   name: string;
-  originalGas: number;
+  stateMutability: string;
+  originalGas: number | null;
   optimizedGas: number | null;
   deltaPct: number | null;
+  reason?: string;
 };
+
+function parseGasValue(value: string | undefined): number | null {
+  if (!value) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) {
+    return null;
+  }
+  return n;
+}
+
+function parseFunctionEntry(
+  entry:
+    | {
+        status: "measured";
+        gasUsed: string;
+        stateMutability: string;
+      }
+    | {
+        status: "unmeasured";
+        reason: string;
+        stateMutability: string;
+      }
+    | undefined
+): { gas: number | null; reason?: string } {
+  if (!entry) return { gas: null };
+  if (entry.status === "unmeasured") {
+    return { gas: null, reason: entry.reason || "Unmeasured" };
+  }
+  return { gas: parseGasValue(entry.gasUsed) };
+}
 
 function toRows(result: AnalysisResult): Row[] {
   const baseline = result.dynamicProfile?.gasProfile?.functions || {};
@@ -16,16 +48,26 @@ function toRows(result: AnalysisResult): Row[] {
 
   return [...names]
     .map((name) => {
-      const originalGas = Number(baseline[name] || 0);
-      const optimizedRaw = optimized[name];
-      const optimizedGas = optimizedRaw != null ? Number(optimizedRaw) : null;
+      const original = parseFunctionEntry(baseline[name]);
+      const optimizedEntry = parseFunctionEntry(optimized[name]);
+      const stateMutability =
+        baseline[name]?.stateMutability || optimized[name]?.stateMutability || "nonpayable";
+      const originalGas = original.gas;
+      const optimizedGas = optimizedEntry.gas;
       const deltaPct =
-        optimizedGas != null && originalGas > 0
+        optimizedGas != null && originalGas != null && originalGas > 0
           ? ((optimizedGas - originalGas) / originalGas) * 100
           : null;
-      return { name, originalGas, optimizedGas, deltaPct };
+      return {
+        name,
+        stateMutability,
+        originalGas,
+        optimizedGas,
+        deltaPct,
+        reason: optimizedEntry.reason || original.reason
+      };
     })
-    .sort((a, b) => b.originalGas - a.originalGas);
+    .sort((a, b) => (b.originalGas ?? -1) - (a.originalGas ?? -1));
 }
 
 export function FunctionGasTable({ result }: { result: AnalysisResult }) {
@@ -40,6 +82,7 @@ export function FunctionGasTable({ result }: { result: AnalysisResult }) {
           <thead>
             <tr className="text-left text-xs uppercase tracking-wider text-muted">
               <th className="pb-2 pr-3">Function</th>
+              <th className="pb-2 pr-3">Type</th>
               <th className="pb-2 pr-3">Original</th>
               <th className="pb-2 pr-3">Optimized</th>
               <th className="pb-2">Delta</th>
@@ -48,11 +91,10 @@ export function FunctionGasTable({ result }: { result: AnalysisResult }) {
           <tbody>
             {rows.map((row) => (
               <tr key={row.name} className="border-t border-line/70">
-                <td className="py-2 pr-3 font-mono">{row.name}()</td>
-                <td className="py-2 pr-3">{row.originalGas.toLocaleString()}</td>
-                <td className="py-2 pr-3">
-                  {row.optimizedGas != null ? row.optimizedGas.toLocaleString() : "—"}
-                </td>
+                <td className="py-2 pr-3 font-mono">{formatFunctionName(row.name)}</td>
+                <td className="py-2 pr-3 text-xs uppercase tracking-wide text-muted">{row.stateMutability}</td>
+                <td className="py-2 pr-3">{row.originalGas != null ? row.originalGas.toLocaleString() : "—"}</td>
+                <td className="py-2 pr-3">{row.optimizedGas != null ? row.optimizedGas.toLocaleString() : "—"}</td>
                 <td
                   className={`py-2 ${
                     row.deltaPct == null
@@ -62,7 +104,7 @@ export function FunctionGasTable({ result }: { result: AnalysisResult }) {
                       : "text-danger"
                   }`}
                 >
-                  {row.deltaPct == null ? "—" : `${row.deltaPct.toFixed(2)}%`}
+                  {row.deltaPct == null ? row.reason ? "Unmeasured" : "—" : `${row.deltaPct.toFixed(2)}%`}
                 </td>
               </tr>
             ))}
@@ -71,4 +113,8 @@ export function FunctionGasTable({ result }: { result: AnalysisResult }) {
       </div>
     </section>
   );
+}
+
+function formatFunctionName(name: string): string {
+  return name.includes("(") ? name : `${name}()`;
 }

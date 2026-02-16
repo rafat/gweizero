@@ -15,7 +15,19 @@ type SolidityFunction = {
 
 export type WorkerGasProfile = {
   deploymentGas: string;
-  functions: Record<string, string>;
+  functions: Record<
+    string,
+    | {
+        status: 'measured';
+        gasUsed: string;
+        stateMutability: string;
+      }
+    | {
+        status: 'unmeasured';
+        reason: string;
+        stateMutability: string;
+      }
+  >;
 };
 
 export type WorkerGasProfileResult = {

@@ -26,10 +26,11 @@ export const createAnalyzeJob = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Contract code is required' });
   }
 
-  const job = AnalysisJobService.createJob(code);
+  const { job, reused } = AnalysisJobService.createOrReuseJob(code);
   return res.status(202).json({
     jobId: job.id,
     status: job.status,
+    reused,
   });
 };
 

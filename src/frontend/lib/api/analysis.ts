@@ -20,7 +20,19 @@ export type AnalysisProgressEvent = {
 
 export type GasProfile = {
   deploymentGas: string;
-  functions: Record<string, string>;
+  functions: Record<
+    string,
+    | {
+        status: "measured";
+        gasUsed: string;
+        stateMutability: string;
+      }
+    | {
+        status: "unmeasured";
+        reason: string;
+        stateMutability: string;
+      }
+  >;
 };
 
 export type DynamicProfile = {
@@ -54,6 +66,15 @@ export type AIOptimizationsResult = {
   optimizedContract: string;
   totalEstimatedSaving: string;
   meta?: {
+    provider?: string;
+    model?: string;
+    retriesUsed?: number;
+    schemaRepairAttempts?: number;
+    verifier?: {
+      approved?: boolean;
+      summary?: string;
+      riskFlags?: string[];
+    };
     warnings?: string[];
   };
 };

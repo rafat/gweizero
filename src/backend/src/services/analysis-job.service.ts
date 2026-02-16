@@ -35,9 +35,31 @@ export type AnalysisJob = Omit<AnalysisJobRecord, 'code'>;
 
 export class AnalysisJobService {
   private static jobs = new Map<string, AnalysisJobRecord>();
+  private static codeHashToJobId = new Map<string, string>();
   private static emitter = new EventEmitter();
 
-  public static createJob(code: string): AnalysisJob {
+  public static createOrReuseJob(code: string): { job: AnalysisJob; reused: boolean } {
+    const codeHash = this.codeHash(code);
+    const dedupeTtlMs = this.envInt('ANALYSIS_JOB_DEDUPE_TTL_MS', 10 * 60 * 1000);
+
+    const existingJobId = this.codeHashToJobId.get(codeHash);
+    if (existingJobId) {
+      const existing = this.jobs.get(existingJobId);
+      if (existing) {
+        const terminal =
+          existing.status === 'completed' || existing.status === 'failed' || existing.status === 'cancelled';
+        const withinTtl = Date.now() - existing.updatedAt <= dedupeTtlMs;
+
+        if (!terminal || (terminal && existing.status === 'completed' && withinTtl)) {
+          return {
+            job: this.toPublicJob(existing),
+            reused: true,
+          };
+        }
+      }
+      this.codeHashToJobId.delete(codeHash);
+    }
+
     const id = crypto.randomUUID();
     const now = Date.now();
     const job: AnalysisJobRecord = {
@@ -56,8 +78,12 @@ export class AnalysisJobService {
       ],
     };
     this.jobs.set(id, job);
+    this.codeHashToJobId.set(codeHash, id);
     void this.runJob(id);
-    return this.toPublicJob(job);
+    return {
+      job: this.toPublicJob(job),
+      reused: false,
+    };
   }
 
   public static getJob(id: string): AnalysisJob | undefined {
@@ -121,7 +147,7 @@ export class AnalysisJobService {
           message,
           timestamp: Date.now(),
         });
-      });
+      }, id);
 
       const latest = this.jobs.get(id);
       if (!latest) {
@@ -213,5 +239,18 @@ export class AnalysisJobService {
   private static isCancelledError(error: unknown): boolean {
     const message = error instanceof Error ? error.message.toLowerCase() : '';
     return message.includes('cancel');
+  }
+
+  private static codeHash(code: string): string {
+    return crypto.createHash('sha256').update(code.trim()).digest('hex');
+  }
+
+  private static envInt(envName: string, fallback: number): number {
+    const raw = process.env[envName];
+    if (!raw) {
+      return fallback;
+    }
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : fallback;
   }
 }

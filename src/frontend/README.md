@@ -56,6 +56,7 @@ Open:
 ## Environment
 
 - `NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:3001`
+- `NEXT_PUBLIC_GAS_OPTIMIZATION_REGISTRY_ADDRESS=0x...` (required for MetaMask direct mint)
 
 ## Next Milestone
 
