@@ -36,6 +36,8 @@ export type AIOptimizationMeta = {
   warnings: string[];
 };
 
+export type ProgressCallback = (message: string) => void;
+
 export type AIOptimizationResponse = {
   optimizations: AIOptimization[];
   edits: AICodeEdit[];
@@ -60,6 +62,7 @@ type Provider = {
 type OptimizerOptions = {
   feedback?: string;
   jobId?: string;
+  onProgress?: ProgressCallback;
 };
 
 type AIOptimizationDraft = {
@@ -90,13 +93,20 @@ const DEFAULT_RESPONSE: AIOptimizationResponse = {
 };
 
 export class AIOptimizerService {
-  public static async getOptimizations(code: string, gasProfile: unknown, options?: OptimizerOptions): Promise<AIOptimizationResponse> {
+  public static async getOptimizations(
+    code: string,
+    gasProfile: unknown,
+    options?: OptimizerOptions
+  ): Promise<AIOptimizationResponse> {
     const jobId = options?.jobId;
+    const onProgress = options?.onProgress;
     const providers = this.getProviders();
     this.logInfo(
       `AI optimization start. providers=${providers.map((p) => `${p.name}[${p.models.join(',')}]`).join(' ')}`,
       jobId
     );
+    onProgress?.('Initializing AI optimizer...');
+    
     if (providers.length === 0) {
       this.logWarn('No AI providers configured. Returning original contract.', jobId);
       return {
@@ -115,20 +125,23 @@ export class AIOptimizerService {
     let retriesUsed = 0;
     const warnings: string[] = [];
 
-    const maxCycles = this.envInt('AI_MAX_OPTIMIZER_CYCLES', 3);
+    const maxCycles = this.envInt('AI_MAX_OPTIMIZER_CYCLES', 2);
     let feedback = options?.feedback || '';
 
     for (let cycle = 1; cycle <= maxCycles; cycle++) {
       try {
+        onProgress?.(`AI optimization cycle ${cycle}/${maxCycles}: analyzing contract...`);
         this.logInfo(`AI cycle ${cycle}/${maxCycles} started.`, jobId);
         const optimizerPrompt = this.buildOptimizerPrompt(code, gasProfile, feedback);
         this.logInfo(`Optimizer prompt chars=${optimizerPrompt.length}`, jobId);
+        onProgress?.('Calling AI model (this may take 30-60s)...');
         const optimizedCall = await this.callWithFallback(providers, optimizerPrompt, 'optimizer', jobId);
         retriesUsed += optimizedCall.retriesUsed;
         this.logInfo(
           `Optimizer response received provider=${optimizedCall.provider} model=${optimizedCall.model} chars=${optimizedCall.text.length}`,
           jobId
         );
+        onProgress?.('AI response received, validating JSON schema...');
         this.logRawResponse('optimizer', optimizedCall.text, jobId);
 
         let parsed: unknown;
@@ -137,10 +150,12 @@ export class AIOptimizerService {
         } catch (parseError: unknown) {
           const parseMessage = parseError instanceof Error ? parseError.message : 'Unknown JSON parse error';
           this.logWarn(`Optimizer JSON parse failed: ${parseMessage}`, jobId);
+          onProgress?.('JSON parse failed, repairing output...');
           const repairPrompt = this.buildRepairPrompt(optimizerPrompt, optimizedCall.text, [
             `JSON parse failure: ${parseMessage}`,
           ]);
           this.logInfo(`Repair prompt (parse failure) chars=${repairPrompt.length}`, jobId);
+          onProgress?.('Calling AI to repair JSON output...');
           const repairedCall = await this.callWithFallback(providers, repairPrompt, 'optimizer', jobId);
           retriesUsed += repairedCall.retriesUsed;
           schemaRepairAttempts += 1;
@@ -155,8 +170,10 @@ export class AIOptimizerService {
         let validation = this.validateOptimizationDraft(parsed);
         if (!validation.valid) {
           this.logWarn(`Schema validation failed. errors=${validation.errors.join(' | ')}`, jobId);
+          onProgress?.('Schema validation failed, requesting repair...');
           const repairPrompt = this.buildRepairPrompt(optimizerPrompt, optimizedCall.text, validation.errors);
           this.logInfo(`Repair prompt chars=${repairPrompt.length}`, jobId);
+          onProgress?.('Calling AI to fix schema violations...');
           const repairedCall = await this.callWithFallback(providers, repairPrompt, 'optimizer', jobId);
           retriesUsed += repairedCall.retriesUsed;
           schemaRepairAttempts += 1;
@@ -170,20 +187,24 @@ export class AIOptimizerService {
           if (!validation.valid) {
             lastError = `Schema validation failed after repair: ${validation.errors.join('; ')}`;
             feedback = `Your prior JSON was invalid: ${validation.errors.join('; ')}. Output valid JSON only.`;
+            onProgress?.(`Cycle ${cycle} failed: schema validation failed after repair`);
             continue;
           }
         }
 
         const draft = parsed as AIOptimizationDraft;
+        onProgress?.('Generating optimized contract code...');
         const generated = await this.generateOptimizedContract(code, draft.edits, providers, jobId);
         retriesUsed += generated.retriesUsed;
         const optimizedContract = generated.code;
+        onProgress?.('Verifying optimization safety and correctness...');
         const verifier = await this.verifyCandidate(code, gasProfile, optimizedContract, draft.edits, providers, jobId);
         if (!verifier.approved) {
-          lastError = `Verifier rejected candidate: ${verifier.summary}`;
+          lastError = `Verifier rejects candidate: ${verifier.summary}`;
           this.logWarn(lastError, jobId);
-          feedback = `Verifier rejected previous attempt. Risks: ${verifier.riskFlags.join(', ')}. Summary: ${verifier.summary}`;
+          feedback = `Verifier rejects previous attempt. Risks: ${verifier.riskFlags.join(', ')}. Summary: ${verifier.summary}`;
           warnings.push(lastError);
+          onProgress?.(`Cycle ${cycle} failed: verifier rejected optimization`);
           continue;
         }
 
@@ -191,6 +212,7 @@ export class AIOptimizerService {
           `AI optimization accepted provider=${optimizedCall.provider} model=${optimizedCall.model}`,
           jobId
         );
+        onProgress?.('Optimization verified and accepted!');
         return {
           optimizations: draft.optimizations,
           edits: draft.edits,
@@ -347,7 +369,7 @@ export class AIOptimizerService {
               ...(responseSchema ? { responseSchema: responseSchema as any } : {}),
               temperature: 0.15,
               topP: 0.95,
-              maxOutputTokens: 8192,
+              maxOutputTokens: 32768,
             },
           });
           return response.text || '';
@@ -376,6 +398,7 @@ export class AIOptimizerService {
             body: JSON.stringify({
               model,
               temperature: 0.1,
+              max_tokens: 16384,
               ...(asJson ? { response_format: { type: 'json_object' } } : {}),
               messages: [
                 { role: 'system', content: asJson ? 'You return strict JSON only.' : 'Return Solidity code only.' },
@@ -491,10 +514,21 @@ export class AIOptimizerService {
     // Fix common invalid model output:
     // for (uint256 i = 0; i < len; unchecked { ++i; })
     // Convert to checked increment to preserve semantics and compile.
-    return code.replace(
+    let fixed = code.replace(
       /for\s*\(\s*uint256\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*0\s*;\s*([^;]+?)\s*;\s*unchecked\s*\{\s*\+\+\1\s*;?\s*\}\s*\)/g,
       'for (uint256 $1 = 0; $2; ++$1)'
     );
+
+    // Fix invalid require with custom errors:
+    // require(condition, CustomError()) -> if (!condition) revert CustomError();
+    // Pattern: require(msg.sender == owner || !paused, ContractPaused());
+    // Becomes: if (!(msg.sender == owner || !paused)) revert ContractPaused();
+    fixed = fixed.replace(
+      /require\s*\(\s*(.+?)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\)\s*;/g,
+      'if (!($1)) revert $2();'
+    );
+
+    return fixed;
   }
 
   private static buildOptimizerPrompt(code: string, gasProfile: unknown, feedback: string): string {
@@ -502,17 +536,43 @@ export class AIOptimizerService {
 You are an expert Solidity gas optimizer.
 Goal: reduce gas while preserving behavior.
 
-Hard constraints:
-- Preserve contract semantics and authorization logic.
-- Preserve externally observable behavior and ABI compatibility.
-- Do not introduce reentrancy risks.
-- Only use unchecked when provably safe.
-- Return JSON only.
-- Keep response compact to avoid truncation:
-  - max 4 optimizations
-  - max 4 edits
-  - each "before"/"after" snippet <= 120 chars
-  - keep descriptions concise
+CRITICAL CONSTRAINTS (MUST FOLLOW):
+1. PRESERVE ABI COMPATIBILITY - DO NOT CHANGE:
+   - Function signatures (name, parameters, visibility, mutability)
+   - State variable types (do NOT change uint256 to uint128, etc.)
+   - Do NOT change 'public' to 'immutable' or 'private'
+   - Event signatures
+   
+2. HIGH-IMPACT OPTIMIZATIONS (PRIORITIZE THESE):
+   - Storage packing: reorder struct fields to use fewer slots
+   - Cache array lengths: uint256 len = arr.length; for (i < len)
+   - Use calldata instead of memory for external function params
+   - Use storage pointers: Account storage acct = accounts[msg.sender];
+   
+3. SAFE OPTIMIZATIONS:
+   - Unchecked for loop counters ONLY: for (i = 0; i < len; ) { ... unchecked { ++i; } }
+   - Remove redundant checks: uint256 >= 0
+   - Use existing custom errors: if (!condition) revert CustomError();
+
+4. CUSTOM ERRORS - CORRECT SYNTAX:
+   - WRONG: require(condition, CustomError())  <- DOES NOT COMPILE
+   - CORRECT: if (!condition) revert CustomError();
+   - Only use custom errors with 'revert', NEVER with 'require'
+
+5. FORBIDDEN CHANGES:
+   - Do NOT change state variable types or visibility
+   - Do NOT add new custom errors (use existing ones only)
+   - Do NOT change function visibility
+   - Do NOT remove or add functions/events
+   - Do NOT use unchecked for balance/token arithmetic (only counters)
+
+6. Return JSON only - NO markdown, NO code fences.
+
+OUTPUT LIMITS (to avoid truncation):
+- Maximum 3 optimizations
+- Maximum 3 edits  
+- Each "before"/"after": max 80 characters
+- Descriptions: max 120 chars
 
 Input contract:
 ${code}
@@ -523,16 +583,16 @@ ${JSON.stringify(gasProfile, null, 2)}
 Feedback from previous failed attempts (if any):
 ${feedback || 'None'}
 
-Return this exact JSON shape:
+Return this exact JSON shape (valid JSON, no trailing commas):
 {
   "optimizations": [
     {
       "type": "string",
-      "description": "string",
+      "description": "string (max 120 chars)",
       "estimatedSaving": "string",
       "line": 1,
-      "before": "string",
-      "after": "string"
+      "before": "string (max 80 chars)",
+      "after": "string (max 80 chars)"
     }
   ],
   "edits": [
@@ -540,15 +600,13 @@ Return this exact JSON shape:
       "action": "replace|insert|delete",
       "lineStart": 1,
       "lineEnd": 1,
-      "before": "string",
-      "after": "string",
-      "rationale": "string"
+      "before": "string (max 80 chars)",
+      "after": "string (max 80 chars)",
+      "rationale": "string (max 120 chars)"
     }
   ],
   "totalEstimatedSaving": "string"
 }
-
-Do not wrap JSON in markdown.
 `;
   }
 
@@ -561,16 +619,17 @@ Schema errors:
 Original instructions:
 ${originalPrompt}
 
-Previous invalid output:
+Previous invalid output (DO NOT REPEAT THIS FORMAT):
 ${badOutput}
 
-Important compactness rules:
-- max 4 optimizations
-- max 4 edits
-- keep before/after snippets short (<= 120 chars)
-- keep descriptions concise
+CRITICAL: This time output VALID JSON only:
+- NO markdown code fences
+- NO trailing commas
+- Maximum 3 optimizations
+- Maximum 3 edits
+- Each before/after: max 80 characters
 
-Return corrected JSON only, no markdown.
+Return corrected JSON only. Nothing else.
 `;
   }
 
@@ -579,16 +638,37 @@ Return corrected JSON only, no markdown.
 You are an expert Solidity refactoring engine.
 Apply the requested edits to produce one final optimized contract.
 
-Rules:
-- Return Solidity source code only (no JSON, no markdown).
-- Preserve behavior and ABI compatibility.
-- Keep formatting clean and valid for compilation.
-- If any edit is unsafe, skip it rather than breaking semantics.
-- IMPORTANT Solidity syntax:
-  - Do NOT write \`for (...; ...; unchecked { ++i; })\` (invalid).
-  - Valid unchecked form is:
-    \`for (uint256 i = 0; i < len; ) { ... unchecked { ++i; } }\`
-  - Or use standard checked increment: \`for (...; ...; ++i)\`.
+CRITICAL RULES:
+1. PRESERVE ABI COMPATIBILITY:
+   - Do NOT change function signatures
+   - Do NOT change state variable types or visibility (keep 'public' as 'public')
+   - Do NOT add or remove functions, events, or errors
+   - Keep all existing custom errors (do not add new ones)
+
+2. CODE OUTPUT:
+   - Return COMPLETE Solidity source code only
+   - NO markdown, NO code fences
+   - Preserve behavior and semantics
+   - Keep formatting clean and compilable
+
+3. APPLY THESE OPTIMIZATIONS WHERE POSSIBLE:
+   - Storage packing: reorder struct fields for tight packing
+   - Cache array lengths before loops
+   - Use calldata for external function parameters
+   - Use storage pointers for repeated mapping access
+   - Unchecked for loop counters: for (i = 0; i < len; ) { ... unchecked { ++i; } }
+
+4. CUSTOM ERRORS - CORRECT SYNTAX:
+   - WRONG: require(condition, CustomError())  <- DOES NOT COMPILE
+   - CORRECT: if (!condition) revert CustomError();
+   - NEVER pass custom errors to require()
+
+5. UNCHECKED MATH RULES:
+   - ONLY use unchecked for: loop counters (i++), simple counters (total++)
+   - NEVER use unchecked for: balance arithmetic, token amounts, staked amounts
+   - Safe pattern: for (uint256 i = 0; i < len; ) { ... unchecked { ++i; } }
+
+6. If any edit would break ABI compatibility or syntax, SKIP that edit.
 
 Original contract:
 ${originalCode}
@@ -607,6 +687,24 @@ ${JSON.stringify(edits, null, 2)}
     return `
 You are a strict Solidity optimization verifier.
 Assess whether optimized code is safe and behavior-preserving.
+
+VERIFICATION CHECKLIST:
+1. ABI COMPATIBILITY (CRITICAL):
+   - No state variables changed from 'public' to 'immutable' or 'private'
+   - No function signatures changed (name, params, visibility, mutability)
+   - No functions/events added or removed
+   - Auto-generated getters must remain compatible
+
+2. SAFETY CHECKS:
+   - No unsafe unchecked arithmetic (only loop counters are safe)
+   - No reentrancy risks introduced
+   - No authorization logic changed
+   - No storage layout changes that break upgrades
+
+3. SEMANTIC PRESERVATION:
+   - Behavior must be identical for all valid inputs
+   - Error handling must be equivalent (reverts on same conditions)
+   - State transitions must be identical
 
 Original:
 ${originalCode}
@@ -627,7 +725,10 @@ Return JSON only:
   "riskFlags": ["string"]
 }
 
-Set approved=false if there is any likely semantic or security regression risk.
+Set approved=false if:
+- ABI compatibility is broken (e.g., public → immutable)
+- Any safety check fails
+- Semantic behavior changes
 `;
   }
 

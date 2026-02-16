@@ -29,7 +29,7 @@ async function main() {
   const artifactDir = path.join(__dirname, '..', 'artifacts', 'contracts', sourceFile);
   const artifactFileName = await findArtifactFile(artifactDir);
   if (!artifactFileName) {
-    throw new Error(`No artifact found for ${sourceFile}`);
+    throw new Error(`No artifact found for ${sourceFile} in ${artifactDir}`);
   }
 
   const artifactPath = path.join(artifactDir, artifactFileName);
@@ -40,7 +40,14 @@ async function main() {
     bytecode: artifact.bytecode,
   });
 
-  const contract = await Contract.deploy();
+  // Find constructor inputs and generate deterministic arguments
+  const constructorFragment = artifact.abi.find((item) => item.type === 'constructor');
+  const constructorInputs = constructorFragment?.inputs || [];
+  const constructorArgs = generateDeterministicInputs(constructorInputs);
+
+  console.error(`Deploying ${artifact.contractName} with ${constructorArgs.length} constructor args...`);
+  
+  const contract = await Contract.deploy(...constructorArgs);
   await contract.waitForDeployment();
 
   const deployTx = contract.deploymentTransaction();

@@ -320,15 +320,11 @@ export function ProofActions({ jobId, defaultContractName }: Props) {
         <Button onClick={onWalletMint} disabled={walletMintState === "loading"}>
           {walletMintState === "loading" ? "Minting via Wallet..." : "Mint via MetaMask"}
         </Button>
-        <Button variant="secondary" onClick={onMintProof} disabled={mintState === "loading"}>
-          {mintState === "loading" ? "Minting via Backend..." : "Mint via Backend"}
-        </Button>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-xs">
         <StatusPill label={`Payload: ${payloadState}`} state={payloadState} />
         <StatusPill label={`Wallet mint: ${walletMintState}`} state={walletMintState} />
-        <StatusPill label={`Backend mint: ${mintState}`} state={mintState} />
       </div>
 
       {payload && (

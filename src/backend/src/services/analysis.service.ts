@@ -59,33 +59,40 @@ export class AnalysisService {
     attempts: number;
   }> {
     const maxAttempts = this.envInt('AI_ACCEPTANCE_MAX_ATTEMPTS', 3);
-    let feedback = '';
     let attempts = 0;
 
-    let latestAIResult: AIOptimizationResponse = {
-      ...(await AIOptimizerService.getOptimizations(originalCode, baselineDynamicProfile.gasProfile, {
-        feedback: 'Initial optimization pass.',
-        jobId,
-      })),
-    };
+    // Run AI optimization ONCE
+    onProgress?.('ai_optimization', 'Running AI optimization...');
+    const aiResult = await AIOptimizerService.getOptimizations(originalCode, baselineDynamicProfile.gasProfile, {
+      feedback: 'Initial optimization pass.',
+      jobId,
+      onProgress: (message) => onProgress?.('ai_optimization', message),
+    });
 
+    const candidateCode = aiResult.optimizedContract?.trim() || originalCode;
+    if (!candidateCode || candidateCode === originalCode) {
+      onProgress?.('ai_optimization', 'AI returned unchanged code, skipping validation.');
+      return {
+        aiResult,
+        optimizedDynamicProfile: null,
+        validation: {
+          accepted: false,
+          reason: 'AI returned unchanged code.',
+          checks: {
+            compiled: false,
+            abiCompatible: false,
+            deploymentGasRegressionPct: 0,
+            averageMutableFunctionRegressionPct: 0,
+            improved: false,
+          },
+        },
+        attempts: 1,
+      };
+    }
+
+    // Retry compilation/validation up to maxAttempts times
     for (let i = 0; i < maxAttempts; i++) {
       attempts += 1;
-      if (i > 0) {
-        latestAIResult = await AIOptimizerService.getOptimizations(
-          originalCode,
-          baselineDynamicProfile.gasProfile,
-          { feedback, jobId }
-        );
-      }
-
-      const candidateCode = latestAIResult.optimizedContract?.trim() || originalCode;
-      if (!candidateCode || candidateCode === originalCode) {
-        feedback = 'Candidate is unchanged or empty. Produce a meaningful but safe optimization.';
-        onProgress?.('ai_optimization', `Attempt ${attempts}: candidate unchanged, retrying...`);
-        continue;
-      }
-
       onProgress?.('ai_optimization', `Attempt ${attempts}: compiling and benchmarking optimized candidate...`);
 
       try {
@@ -96,34 +103,32 @@ export class AnalysisService {
         );
 
         if (validation.accepted) {
+          onProgress?.('ai_optimization', `Validation passed! Optimization accepted.`);
           return {
-            aiResult: latestAIResult,
+            aiResult,
             optimizedDynamicProfile,
             validation,
             attempts,
           };
         }
 
-        feedback = `Candidate rejected by acceptance policy: ${validation.reason}. ` +
-          `deployment regression=${validation.checks.deploymentGasRegressionPct.toFixed(2)}%, ` +
-          `function regression=${validation.checks.averageMutableFunctionRegressionPct.toFixed(2)}%.`;
+        onProgress?.('ai_optimization', `Attempt ${attempts} failed validation: ${validation.reason}`);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown compile/runtime error';
-        feedback = `Candidate failed compile/deploy/gas analysis: ${message}`;
         onProgress?.('ai_optimization', `Attempt ${attempts} failed validation: ${message}`);
       }
     }
 
     return {
       aiResult: {
-        ...latestAIResult,
+        ...aiResult,
         optimizedContract: originalCode,
         totalEstimatedSaving: `Rejected by acceptance policy after ${attempts} attempts.`,
         meta: {
-          ...latestAIResult.meta,
+          ...aiResult.meta,
           warnings: [
-            ...(latestAIResult.meta.warnings || []),
-            `Final acceptance failed. Last feedback: ${feedback}`,
+            ...(aiResult.meta.warnings || []),
+            `Final acceptance failed after ${attempts} attempts.`,
           ],
         },
       },
