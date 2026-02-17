@@ -6,6 +6,8 @@ Core value proposition:
 
 > Paste a contract, get validated optimization candidates with measured gas savings and optional on-chain proof minting.
 
+On-Chain Proof of Mint (BSC Mainnet) : https://bscscan.com/tx/0x3c54828f1ab0e303face736eaa07fd147fad3ebd7471ba681693605eab0df654
+
 ## Repository Structure
 
 ```text
