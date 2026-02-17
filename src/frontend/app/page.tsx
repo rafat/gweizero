@@ -8,9 +8,7 @@ export default function HomePage() {
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-accent">GweiZero</p>
           <h1 className="mt-2 text-4xl font-semibold leading-tight">
-            Gas Optimization
-            <br />
-            BNB Chain HUD
+            BNB Gas Optimizer
           </h1>
         </div>
         <nav className="flex items-center gap-3 text-sm">

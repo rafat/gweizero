@@ -37,3 +37,7 @@ src/contracts/typechain-types/
 
 # Worker runtime data
 src/worker/data/
+
+# Presentation files (personal prep)
+docs/PRESENTATION.md
+docs/SUMMARY.md
