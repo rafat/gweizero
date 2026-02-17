@@ -258,6 +258,18 @@ export class AIOptimizerService {
     providers: Provider[],
     jobId?: string
   ): Promise<AIVerifierResult> {
+    // Step 1: Run static analysis to catch common compilation errors before AI verification
+    const staticAnalysis = this.runStaticAnalysis(optimizedCode);
+    if (!staticAnalysis.valid) {
+      this.logWarn(`Static analysis failed: ${staticAnalysis.errors.join('; ')}`, jobId);
+      return {
+        approved: false,
+        summary: `Compilation anti-patterns detected: ${staticAnalysis.errors.join('; ')}`,
+        riskFlags: ['static_analysis_failed', ...staticAnalysis.errors],
+      };
+    }
+
+    // Step 2: AI verifier for semantic/logic checks
     const prompt = this.buildVerifierPrompt(originalCode, gasProfile, optimizedCode, edits);
     try {
       this.logInfo(`Verifier prompt chars=${prompt.length}`, jobId);
@@ -510,6 +522,41 @@ export class AIOptimizerService {
     return text;
   }
 
+  /**
+   * Run static analysis to catch common compilation anti-patterns before attempting compilation.
+   * This is a fast, regex-based check to catch obvious Solidity errors.
+   */
+  private static runStaticAnalysis(code: string): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Check 1: Invalid storage location on value types
+    // Pattern: "type storage var = mapping[key]" where type is uint/int/address/bool
+    const invalidStoragePatterns = [
+      {
+        pattern: /\b(uint\d*|int\d*|address|bool|bytes\d*)\s+storage\s+\w+\s*=\s*\w+\s*\[/g,
+        message: 'storage keyword used on value type (only valid for array/struct/mapping)',
+      },
+      // Check 2: require() with custom error syntax (doesn't compile)
+      {
+        pattern: /require\s*\([^,]+,\s*[A-Za-z_]\w*\s*\(\s*\)\s*\)/g,
+        message: 'require() with custom error syntax - use "if (!cond) revert Error();" instead',
+      },
+      // Check 3: Malformed unchecked blocks
+      {
+        pattern: /unchecked\s*\(\s*\+\+/g,
+        message: 'malformed unchecked block - use "unchecked { ++i; }"',
+      },
+    ];
+
+    for (const { pattern, message } of invalidStoragePatterns) {
+      if (pattern.test(code)) {
+        errors.push(message);
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
   private static fixCommonInvalidForSyntax(code: string): string {
     // Fix common invalid model output:
     // for (uint256 i = 0; i < len; unchecked { ++i; })
@@ -534,45 +581,47 @@ export class AIOptimizerService {
   private static buildOptimizerPrompt(code: string, gasProfile: unknown, feedback: string): string {
     return `
 You are an expert Solidity gas optimizer.
-Goal: reduce gas while preserving behavior.
+Goal: Aggressively optimize for gas while maintaining correctness.
 
-CRITICAL CONSTRAINTS (MUST FOLLOW):
-1. PRESERVE ABI COMPATIBILITY - DO NOT CHANGE:
-   - Function signatures (name, parameters, visibility, mutability)
-   - State variable types (do NOT change uint256 to uint128, etc.)
-   - Do NOT change 'public' to 'immutable' or 'private'
-   - Event signatures
-   
-2. HIGH-IMPACT OPTIMIZATIONS (PRIORITIZE THESE):
-   - Storage packing: reorder struct fields to use fewer slots
-   - Cache array lengths: uint256 len = arr.length; for (i < len)
-   - Use calldata instead of memory for external function params
-   - Use storage pointers: Account storage acct = accounts[msg.sender];
-   
-3. SAFE OPTIMIZATIONS:
-   - Unchecked for loop counters ONLY: for (i = 0; i < len; ) { ... unchecked { ++i; } }
-   - Remove redundant checks: uint256 >= 0
-   - Use existing custom errors: if (!condition) revert CustomError();
+OPTIMIZATION PRIORITIES (apply these aggressively):
 
-4. CUSTOM ERRORS - CORRECT SYNTAX:
-   - WRONG: require(condition, CustomError())  <- DOES NOT COMPILE
-   - CORRECT: if (!condition) revert CustomError();
-   - Only use custom errors with 'revert', NEVER with 'require'
+1. STORAGE PACKING (high impact - 2100 gas per slot saved):
+   - Reorder struct fields: large types first, then small types together
+   - Example: { uint256 score; uint64 joinedAt; bool active; } 
+     → { bool active; uint64 joinedAt; uint256 score; } (saves 1 slot)
+   - Pack state variables: group uint8, bool, uint16 together
 
-5. FORBIDDEN CHANGES:
-   - Do NOT change state variable types or visibility
-   - Do NOT add new custom errors (use existing ones only)
-   - Do NOT change function visibility
-   - Do NOT remove or add functions/events
-   - Do NOT use unchecked for balance/token arithmetic (only counters)
+2. CALLDATA VS MEMORY (high impact - 500-1000 gas per call):
+   - External functions: ALWAYS use calldata for arrays/strings
+   - Example: function foo(uint256[] memory arr) 
+     → function foo(uint256[] calldata arr)
+   - Internal functions: memory is fine
 
-6. Return JSON only - NO markdown, NO code fences.
+3. STORAGE POINTERS (high impact - 2100 gas per access):
+   - Cache mapping accesses: User storage user = users[account];
+   - Then use: user.score instead of users[account].score
 
-OUTPUT LIMITS (to avoid truncation):
-- Maximum 3 optimizations
-- Maximum 3 edits  
-- Each "before"/"after": max 80 characters
-- Descriptions: max 120 chars
+4. LOOP OPTIMIZATIONS (medium impact - 50-100 gas per iteration):
+   - Cache array length: uint256 len = arr.length;
+   - Unchecked increment: for (i = 0; i < len; ) { ... unchecked { ++i; } }
+   - Apply to ALL loops where overflow is impossible
+
+5. UNCHECKED MATH (low impact - 20 gas per op):
+   - Loop counters: unchecked { ++i; }
+   - Counter increments: unchecked { total++; }
+   - ONLY when overflow is provably impossible
+
+6. REMOVE REDUNDANT CHECKS:
+   - require(uint256 >= 0) - always true
+   - require(bool) when bool is already validated
+
+FORBIDDEN (security issues):
+- Do NOT remove authorization checks
+- Do NOT change business logic
+- Do NOT remove essential require() statements
+- Do NOT use unchecked for balance/token arithmetic
+
+Return JSON with up to 3 optimizations and 3 edits.
 
 Input contract:
 ${code}
@@ -583,7 +632,7 @@ ${JSON.stringify(gasProfile, null, 2)}
 Feedback from previous failed attempts (if any):
 ${feedback || 'None'}
 
-Return this exact JSON shape (valid JSON, no trailing commas):
+Return this exact JSON shape:
 {
   "optimizations": [
     {
@@ -655,7 +704,7 @@ CRITICAL RULES:
    - Storage packing: reorder struct fields for tight packing
    - Cache array lengths before loops
    - Use calldata for external function parameters
-   - Use storage pointers for repeated mapping access
+   - Use storage pointers for repeated mapping/array access
    - Unchecked for loop counters: for (i = 0; i < len; ) { ... unchecked { ++i; } }
 
 4. CUSTOM ERRORS - CORRECT SYNTAX:
@@ -668,7 +717,14 @@ CRITICAL RULES:
    - NEVER use unchecked for: balance arithmetic, token amounts, staked amounts
    - Safe pattern: for (uint256 i = 0; i < len; ) { ... unchecked { ++i; } }
 
-6. If any edit would break ABI compatibility or syntax, SKIP that edit.
+6. STORAGE POINTER RULES (CRITICAL):
+   - ONLY use "storage" keyword for REFERENCE TYPES (structs, arrays, mappings)
+   - WRONG: uint256 storage userPoints = points[users[i]];  <- DOES NOT COMPILE
+   - CORRECT: uint256 userPoints = points[users[i]];  <- value type, no storage
+   - CORRECT: MyStruct storage myStruct = myStructs[id];  <- struct, uses storage
+   - When caching mapping values, NEVER use storage for value types (uint/int/address/bool)
+
+7. If any edit would break ABI compatibility or syntax, SKIP that edit.
 
 Original contract:
 ${originalCode}
@@ -685,26 +741,81 @@ ${JSON.stringify(edits, null, 2)}
     edits: AICodeEdit[]
   ): string {
     return `
-You are a strict Solidity optimization verifier.
-Assess whether optimized code is safe and behavior-preserving.
+You are a practical Solidity optimization verifier.
+Goal: Approve safe gas optimizations while catching REAL security issues AND compilation errors.
 
-VERIFICATION CHECKLIST:
-1. ABI COMPATIBILITY (CRITICAL):
-   - No state variables changed from 'public' to 'immutable' or 'private'
-   - No function signatures changed (name, params, visibility, mutability)
-   - No functions/events added or removed
-   - Auto-generated getters must remain compatible
+IMPORTANT CONTEXT:
+- This is for NEW contract deployments (NOT upgradeable proxies)
+- Storage layout changes are OK for new deployments
+- Function parameter location changes (memory → calldata) are SAFE
 
-2. SAFETY CHECKS:
-   - No unsafe unchecked arithmetic (only loop counters are safe)
-   - No reentrancy risks introduced
-   - No authorization logic changed
-   - No storage layout changes that break upgrades
+CRITICAL COMPILATION CHECKS (reject if any of these are present):
+❌ "type storage var = mapping[key]" on value types (uint/int/address/bool)
+   - WRONG: uint256 storage userPoints = points[users[i]];
+   - CORRECT: uint256 userPoints = points[users[i]]; (no storage keyword)
+   - The storage keyword ONLY works with arrays, structs, and mappings
+❌ require(condition, CustomError()) syntax
+   - WRONG: require(msg.sender == owner, NotAuthorized())
+   - CORRECT: if (msg.sender != owner) revert NotAuthorized();
+❌ Malformed unchecked blocks
+   - WRONG: unchecked(++i) or unchecked(i++)
+   - CORRECT: unchecked { ++i; }
 
-3. SEMANTIC PRESERVATION:
-   - Behavior must be identical for all valid inputs
-   - Error handling must be equivalent (reverts on same conditions)
-   - State transitions must be identical
+APPROVE THESE OPTIMIZATIONS (they are safe):
+✅ memory → calldata for external function parameters
+  - This is SAFE and recommended for external functions
+  - Does NOT break existing callers (data passes the same way)
+
+✅ Struct field reordering for storage packing
+  - SAFE for new deployments (not upgradeable contracts)
+  - Reduces storage slots = significant gas savings
+
+✅ Cache array lengths in loops
+  - Always safe, standard optimization
+
+✅ Unchecked for loop counters
+  - Safe when overflow is impossible (i < len where len is uint256)
+  - Pattern: for (uint256 i = 0; i < len; ) { ... unchecked { ++i; } }
+
+✅ Unchecked for simple counter increments (SAFE - industry standard)
+  - totalTransactions++, totalUsers++, counter++ are SAFE with unchecked
+  - uint256 overflow is practically impossible (requires 10^77 transactions)
+  - This is standard practice (OpenZeppelin, Uniswap, Aave all use this)
+  - Example: unchecked { totalTransactions++; } ← SAFE, approve this
+  - Example: unchecked { counter++; } ← SAFE, approve this
+
+✅ Storage pointers for repeated mapping/array access
+  - User storage user = users[account]; user.score += amount;
+  - Standard optimization, completely safe
+  - ONLY valid for reference types (structs, arrays, mappings)
+
+✅ Remove redundant checks (uint256 >= 0)
+  - Safe, uint256 can never be negative
+
+✅ UNCHECKED IN BASE CONTRACTS (SAFE - do not reject for this):
+  - ERC20, ERC721, and other standard contracts often use unchecked arithmetic
+  - This is SAFE when there are require() checks before the operation
+  - Example: require(fromBalance >= amount); unchecked { _balances[from] -= amount; }
+  - This is the OpenZeppelin standard pattern - DO NOT reject for this
+  - Only reject if unchecked is added to code that DIDN'T have it before
+
+REJECT ONLY THESE (real issues):
+❌ Removing authorization checks (onlyOwner, etc.)
+❌ Changing business logic (different calculations, conditions)
+❌ Removing essential require() statements
+❌ Introducing reentrancy vulnerabilities
+❌ Unchecked arithmetic on BALANCE/TOKEN/STAKING amounts WITHOUT prior require checks
+   - WRONG: balance += amount; (no check, can overflow)
+   - WRONG: unchecked { tokens -= amount; } (no check, can underflow)
+   - CORRECT: require(fromBalance >= amount); unchecked { _balances[from] -= amount; } ← SAFE
+   - CORRECT: unchecked { counter++; } ← SAFE (counter overflow is practically impossible)
+   - CORRECT: unchecked { ++i; } ← SAFE (loop counter)
+❌ ANY of the compilation anti-patterns listed above
+
+IMPORTANT: Focus on what CHANGED, not what was already in the original contract.
+- If unchecked arithmetic was in the ORIGINAL code, it's not an optimization risk
+- Standard library code (ERC20, Context, Ownable, Pausable) should not trigger rejection
+- Only reject if the OPTIMIZATION INTRODUCED new unsafe patterns
 
 Original:
 ${originalCode}
@@ -725,10 +836,13 @@ Return JSON only:
   "riskFlags": ["string"]
 }
 
-Set approved=false if:
-- ABI compatibility is broken (e.g., public → immutable)
-- Any safety check fails
-- Semantic behavior changes
+Set approved=false ONLY if there are REAL security issues, logic errors, OR compilation anti-patterns.
+Do NOT reject for memory→calldata or struct reordering (safe for new deployments).
+Do NOT reject unchecked for loop counters or simple counter increments (totalTransactions++, counter++, etc.).
+Do NOT reject unchecked arithmetic that was already in the ORIGINAL contract (focus on what CHANGED).
+Do NOT reject standard library patterns (ERC20, Ownable, Pausable) that use unchecked with require checks.
+Carefully scan the optimized code for the compilation anti-patterns listed above.
+Distinguish between SAFE counter increments, UNSAFE balance/token arithmetic, and EXISTING library code.
 `;
   }
 

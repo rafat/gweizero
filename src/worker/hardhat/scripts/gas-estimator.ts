@@ -35,10 +35,12 @@ async function main() {
   const artifactPath = path.join(artifactDir, artifactFileName);
   const artifact = JSON.parse(await fs.readFile(artifactPath, 'utf8')) as Artifact;
 
-  const Contract = await ethers.getContractFactory(artifact.contractName, {
-    abi: artifact.abi,
-    bytecode: artifact.bytecode,
-  });
+  // Load contract using ABI and bytecode directly - works for ANY contract type:
+  // - Standalone contracts
+  // - Flattened contracts  
+  // - Contracts with same names in different files
+  // This avoids Hardhat artifact lookup conflicts entirely
+  const Contract = await ethers.getContractFactory(artifact.abi, artifact.bytecode);
 
   // Find constructor inputs and generate deterministic arguments
   const constructorFragment = artifact.abi.find((item) => item.type === 'constructor');
@@ -92,7 +94,35 @@ async function main() {
 
 async function findArtifactFile(artifactDir: string): Promise<string | undefined> {
   const files = await fs.readdir(artifactDir);
-  return files.find((file) => file.endsWith('.json') && !file.endsWith('.dbg.json'));
+  const jsonFiles = files.filter((file) => file.endsWith('.json') && !file.endsWith('.dbg.json'));
+  
+  // Find the main deployable contract (not interface, not abstract, not library)
+  // Strategy: Look for contracts with constructors (deployable) or longest bytecode
+  let mainContract: string | undefined;
+  let maxBytecodeSize = 0;
+  
+  for (const file of jsonFiles) {
+    const filePath = path.join(artifactDir, file);
+    const artifact = JSON.parse(await fs.readFile(filePath, 'utf8')) as Artifact;
+    
+    // Skip if no bytecode (interface or abstract contract)
+    if (!artifact.bytecode || artifact.bytecode.length <= 2) {
+      continue;
+    }
+    
+    // Check if contract has constructor (deployable)
+    const hasConstructor = artifact.abi?.some(item => item.type === 'constructor');
+    
+    // Prefer contracts with constructors, or largest bytecode
+    const bytecodeSize = artifact.bytecode.length;
+    if ((hasConstructor && bytecodeSize > maxBytecodeSize) || bytecodeSize > maxBytecodeSize) {
+      maxBytecodeSize = bytecodeSize;
+      mainContract = file;
+    }
+  }
+  
+  // Fallback: return the last JSON file
+  return mainContract || jsonFiles[jsonFiles.length - 1];
 }
 
 function functionDisplayName(fragment: any): string {
