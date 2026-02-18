@@ -9,7 +9,8 @@
       "description": "GweiZero Optimization Proof"
     }
   ],
-  "frontendUrl": "https://...",
-  "backendApi": "https://...",
+  "frontendUrl": "https://gweizero.vercel.app/",
+  "backendApi": "https://gweizero-backend-397941044984.asia-south2.run.app",
   "notes": "Any special instructions for interacting with the contracts."
 }
+
