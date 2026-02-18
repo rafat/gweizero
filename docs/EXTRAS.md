@@ -5,9 +5,10 @@ Demo videos and slide decks are **mostly for presentation purposes**—pitches, 
 If you still want to link supporting material, you can use the fields below:
 
 - **Demo video** — If you upload to YouTube (unlisted), you can paste the link here.  
-  Link:  
+  Link:  https://www.youtube.com/watch?v=0dOlOXFWWsc
 
 - **Slide deck** — If you have a text-based PDF, you can link it here.  
-  Link:  
+  Link:  https://docs.google.com/presentation/d/1McAmcGDI4WlvapRwcay_ARtK4nekyG2heOKohqc0VAM/edit?usp=sharing
 
 > Video and slides are best when they support what’s already in the repo. For technical evaluation, I rely on the code and documentation first.
+
