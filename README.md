@@ -97,6 +97,15 @@ Minimum backend env values:
 - `COMPILATION_WORKER_URL=http://127.0.0.1:3010`
 - `GEMINI_API_KEY=...` (or `GOOGLE_API_KEY=...`)
 
+### 4) Configure frontend
+
+```bash
+cd src/frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
 ## Primary API Flows
 
 ### Async analysis (recommended)
